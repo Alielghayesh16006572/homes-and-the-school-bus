@@ -100,7 +100,7 @@ def _borough_scatter(df: pd.DataFrame, x: str, y: str, size: str | None = None,
 
 
 # ---------------------------------------------------------------------------
-# Member 1
+# RQ1: Ali Sherif Elghayesh · RQ2: Asser Ehab Khattab
 # ---------------------------------------------------------------------------
 def rq1_units_vs_incidents(yearly: pd.DataFrame) -> go.Figure:
     """RQ1: Do borough-years that delivered more affordable units also log more
@@ -147,7 +147,7 @@ def rq2_timeline(monthly: pd.DataFrame) -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Member 2
+# RQ3: Ali Ahmed · RQ4: Ahmed Rashad
 # ---------------------------------------------------------------------------
 def rq3_deep_affordability_vs_delay(yearly: pd.DataFrame) -> go.Figure:
     """RQ3: Where a larger share of new units is reserved for the lowest-income
@@ -188,7 +188,7 @@ def rq4_lag_heatmap(monthly: pd.DataFrame, max_lag: int = 12) -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Member 3
+# RQ5: Asser Ehab Khattab · RQ6: Ali Sherif Elghayesh
 # ---------------------------------------------------------------------------
 def rq5_map(housing: pd.DataFrame, yearly: pd.DataFrame) -> go.Figure:
     """RQ5: Is new affordable housing concentrated in the same boroughs where school-bus
@@ -257,7 +257,7 @@ def rq6_heavy_traffic_share(yearly: pd.DataFrame) -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Member 4
+# RQ7: Ali Ahmed · RQ8: Ahmed Rashad
 # ---------------------------------------------------------------------------
 def rq7_family_units_vs_students(yearly: pd.DataFrame) -> go.Figure:
     """RQ7: Do borough-years that add more family-sized units (2+ bedrooms) see more

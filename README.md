@@ -87,12 +87,11 @@ The free tier sleeps after inactivity; the first request after that takes about 
 
 | Member (ID) | Research questions | Visualizations | Data cleaning | Integration | Website |
 |---|---|---|---|---|---|
-| `<Member 1 name, ID>` | **RQ1** Do borough-years with more affordable units completed log more school-bus incidents? **RQ2** Does the 12-month housing pipeline move with monthly bus incidents over time? | Scatter with fit; two-panel time series | Housing: duplicates, borough, dates | Monthly grid + join | Search mode |
-| `<Member 2 name, ID>` | **RQ3** Where more new units are for extremely/very low-income households, are delays longer? **RQ4** Do completions precede bus incidents, and by how many months? | Bubble scatter; lag-correlation heatmap | Bus: delay-text parsing, outliers | Lagged correlation | Generate Report callback |
-| `<Member 3 name, ID>` | **RQ5** Is new affordable housing concentrated where bus disruptions concentrate? **RQ6** Is heavy traffic a larger share of delay causes in high new-construction years? | Map; grouped bar | Housing: coordinates, unit consistency | School-year aggregation | Map, layout and CSS |
-| `<Member 4 name, ID>` | **RQ7** Do borough-years adding more family-sized units see more students on disrupted buses? **RQ8** Are Pre-K and school-age delays different in high- vs low-completion years? | Scatter; box plot | Bus: borough mapping, duplicates, student counts | Post-integration cleaning | Story section, deployment |
+| Asser Ehab Khattab (16003477) | **RQ2** Does the 12-month housing pipeline move with monthly bus incidents over time? **RQ5** Is new affordable housing concentrated where bus disruptions concentrate? | Two-panel time series; map | Housing: duplicates, borough, dates | Monthly grid + join | Search mode |
+| Ali Sherif Elghayesh (16006572) | **RQ1** Do borough-years with more affordable units completed log more school-bus incidents? **RQ6** Is heavy traffic a larger share of delay causes in high new-construction years? | Scatter with fit; grouped bar | Housing: coordinates, unit consistency | School-year aggregation | Map, layout and CSS |
+| Ali Ahmed (16001891) | **RQ3** Where more new units are for extremely/very low-income households, are delays longer? **RQ7** Do borough-years adding more family-sized units see more students on disrupted buses? | Bubble scatter; scatter | Bus: borough mapping, duplicates, student counts | Post-integration cleaning | Story section, deployment |
+| Ahmed Rashad (16004574) | **RQ4** Do completions precede bus incidents, and by how many months? **RQ8** Are Pre-K and school-age delays different in high- vs low-completion years? | Lag-correlation heatmap; box plot | Bus: delay-text parsing, outliers | Lagged correlation | Generate Report callback |
 
-*Edit the table so it matches who actually did what (the notebook has the same table).*
 
 ## Limitations
 

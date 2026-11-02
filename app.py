@@ -182,8 +182,8 @@ def dropdown(id_, label, options, placeholder="All"):
 
 
 RQ_CARDS = [
-    ("rq1", "Member 1"), ("rq2", "Member 1"), ("rq3", "Member 2"), ("rq4", "Member 2"),
-    ("rq5", "Member 3"), ("rq6", "Member 3"), ("rq7", "Member 4"), ("rq8", "Member 4"),
+    ("rq1", "Ali Elghayesh"), ("rq2", "Asser Khattab"), ("rq3", "Ali Ahmed"), ("rq4", "Ahmed Rashad"),
+    ("rq5", "Asser Khattab"), ("rq6", "Ali Elghayesh"), ("rq7", "Ali Ahmed"), ("rq8", "Ahmed Rashad"),
 ]
 
 app = Dash(__name__, title="Homes and the School Bus",
