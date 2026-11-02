@@ -239,21 +239,10 @@ app.layout = html.Div(className="page", children=[
         html.Ul(id="live-findings"),
         html.H3("Key findings"),
         html.Ul([
-            html.Li("Across 60 borough-years, more affordable units completed went with more school-bus incidents "
-                    "(r = +0.73). Borough size explains part of this, but the link also holds within every borough "
-                    "(r = +0.43 to +0.67), so a borough's high-completion years tended to be its high-incident years. "
-                    "Citywide shifts that affect both, such as the 2020-21 closures, may explain much of it."),
-            html.Li("A larger share of units for the lowest-income households is not linked to longer delays (r = -0.19); "
-                    "median delays differ more by borough (mostly 20-40 min in the Bronx and Brooklyn vs up to about "
-                    "50 min in Queens and Manhattan). Lagging completions by 0-12 months gives only weak correlations "
-                    "(best mean r = +0.17)."),
-            html.Li("New affordable housing clusters in the Bronx, Upper Manhattan and central Brooklyn. Heavy traffic "
-                    "causes 62.7% of incidents, and its share rises in high-construction years in Brooklyn and Staten "
-                    "Island but not in Manhattan or Queens."),
-            html.Li("More family-sized units goes with more students on disrupted buses (r = +0.40), mostly a borough "
-                    "difference (Bronx about 3-4 students per incident vs under 1 in Manhattan and Staten Island). "
-                    "In high-completion years the median school-age delay is longer (about 38 vs 30 min), and Pre-K "
-                    "delays keep a similar median but more long delays (upper quartile about 53 vs 38 min)."),
+            html.Li("Across 55 complete borough-school-years, more affordable units completed went with more school-bus incidents (r = +0.68). Part of this is borough size; within boroughs the link is weaker (r = +0.18 to +0.49), and citywide shifts such as the 2020-21 closures affect both."),
+            html.Li("A larger share of units for the lowest-income households is not linked to longer delays (r = -0.28); median delays differ mainly by borough (23 min in the Bronx and Staten Island vs 38 in Manhattan and Queens). Completions do not reliably lead incidents at any 0-12 month lag (best mean r = +0.17, at 5 months)."),
+            html.Li("New affordable housing and bus incidents concentrate in the same boroughs (the Bronx, Brooklyn and Manhattan each hold 22-30% of both), while Queens and Staten Island have more incidents than new units. Heavy traffic's share of delays is higher in every borough's high-construction years, most in Brooklyn (43% to 63%), though it also rose over time."),
+            html.Li("Family-sized units and students on disrupted buses correlate across boroughs (r = +0.47) but not within them, so this reflects borough differences. In high-completion years school-age delays are longer (median 38 vs 30 min) while Pre-K delays are shorter (23 vs 30 min)."),
         ]),
         html.H3("Limits"),
         html.Ul([
