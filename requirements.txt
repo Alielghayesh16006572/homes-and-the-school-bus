@@ -1,0 +1,9 @@
+# Website (installed on Render)
+dash==4.5.0
+plotly==7.1.0
+pandas==3.0.5
+numpy==2.5.3
+gunicorn==26.2.0
+
+# Notebook only (also fine to install locally / in Colab)
+matplotlib==3.11.2

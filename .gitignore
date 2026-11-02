@@ -1,0 +1,7 @@
+# Raw downloads are re-created by the notebook; processed data IS committed (the website needs it)
+data/raw/
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store
