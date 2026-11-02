@@ -36,12 +36,17 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
                                 "cleaned tables the website reads), then commit data/processed/.")
     housing = pd.read_csv(DATA / "housing_clean.csv.gz",
                           parse_dates=["building_completion_date", "completion_month"])
-    bus = pd.read_csv(DATA / "bus_clean.csv.gz", parse_dates=["occurred_on", "month"])
-    for df in (housing, bus):
-        df["borough"] = df["borough"].astype("string")
-        df["school_year"] = df["school_year"].astype("string")
-    for col in ["reason", "breakdown_or_running_late", "school_age_or_prek"]:
-        bus[col] = bus[col].astype("string")
+    bus = pd.read_csv(
+        DATA / "bus_clean.csv.gz", parse_dates=["month"],
+        usecols=lambda c: c != "occurred_on",
+        dtype={"reason": "category", "breakdown_or_running_late": "category",
+               "school_age_or_prek": "category", "borough": "category", "school_year": "category"},
+    )
+    # The bus table's repeated text values are read as categories (same results, a
+    # fraction of the memory: Render's free plan allows 512 MB), and the unused
+    # occurred_on column is skipped.
+    housing["borough"] = housing["borough"].astype("string")
+    housing["school_year"] = housing["school_year"].astype("string")
     # Rebuild the flags from the text columns instead of trusting the saved
     # True/False values, so a change to the matching rules applies without
     # re-running the notebook.
@@ -233,9 +238,10 @@ app.layout = html.Div(className="page", children=[
         html.Ul(id="live-findings"),
         html.H3("Key findings"),
         html.Ul([
-            html.Li("Across 60 borough-years, boroughs completing more affordable units also logged more school-bus "
-                    "incidents (r = +0.73), but this is mostly borough size: within each borough the link is weak, and "
-                    "incidents follow the school calendar and the 2020 closure rather than the housing pipeline."),
+            html.Li("Across 60 borough-years, more affordable units completed went with more school-bus incidents "
+                    "(r = +0.73). Borough size explains part of this, but the link also holds within every borough "
+                    "(r = +0.43 to +0.67), so a borough's high-completion years tended to be its high-incident years. "
+                    "Citywide shifts that affect both, such as the 2020-21 closures, may explain much of it."),
             html.Li("A larger share of units for the lowest-income households is not linked to longer delays (r = -0.19); "
                     "median delays differ more by borough (mostly 20-40 min in the Bronx and Brooklyn vs up to about "
                     "50 min in Queens and Manhattan). Lagging completions by 0-12 months gives only weak correlations "
