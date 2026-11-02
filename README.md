@@ -3,7 +3,8 @@
 **NYC affordable housing completions × school-bus breakdowns and delays**
 Data Engineering and Visualization, Winter 2026 — Project Milestone 1
 
-- **Live website:** `<Render URL>`
+- **Live website:** https://homes-and-the-school-bus.onrender.com/
+- **Repository:** https://github.com/Alielghayesh16006572/homes-and-the-school-bus
 - **Datasets (NYC Open Data):**
   - Housing & Development — [Affordable Housing Production by Building](https://data.cityofnewyork.us/d/hg8x-zxpr) (`hg8x-zxpr`)
   - Transportation — [Bus Breakdown and Delays](https://data.cityofnewyork.us/d/ez4e-fazm) (`ez4e-fazm`)
@@ -38,8 +39,8 @@ The notebook justifies this choice and the alternatives considered.
 Requires Python 3.11+.
 
 ```bash
-git clone <repo-url>
-cd <repo-folder>
+git clone https://github.com/Alielghayesh16006572/homes-and-the-school-bus.git
+cd homes-and-the-school-bus
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt jupyter
