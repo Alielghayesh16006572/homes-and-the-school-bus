@@ -139,8 +139,9 @@ def build_report(h: pd.DataFrame, b: pd.DataFrame):
     yearly = build_integrated(h, b, "school_year")
     monthly = build_integrated(h, b, "month")
     if yearly.empty or monthly.empty:
-        empty = F.empty_figure("The two datasets do not overlap in time for these filters")
-        return [empty] * 8, "The filtered datasets share no common period.", []
+        empty = F.empty_figure("No complete school year in this selection")
+        return [empty] * 8, ("No complete school year in this selection — the current school year is "
+                             "still in progress, so it is left out of the comparisons."), []
 
     if b["borough"].nunique() < len(BOROUGHS):     # keep only boroughs actually selected
         yearly = yearly[yearly["borough"].isin(b["borough"].unique())]

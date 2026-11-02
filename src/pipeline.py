@@ -452,7 +452,14 @@ def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month") -
         grid = pd.MultiIndex.from_product([BOROUGHS, periods], names=["borough", "month"]).to_frame(index=False)
         grid["school_year"] = school_year_of(grid["month"])
     else:
-        common = sorted(set(h["school_year"]) & set(b["school_year"]))
+        # Only COMPLETE school years: the newest one in the data has only a few months
+        # so far, and a partial year is low on both housing and bus counts, which would
+        # inflate every correlation. A school year is complete once the bus data
+        # reaches its final month (June).
+        last_month = bus["month"].max()
+        complete = {sy for sy in set(b["school_year"])
+                    if pd.Timestamp(f"{sy.split('-')[1]}-06-01") <= last_month}
+        common = sorted(set(h["school_year"]) & complete)
         grid = pd.MultiIndex.from_product([BOROUGHS, common], names=["borough", "school_year"]).to_frame(index=False)
 
     grid["borough"] = grid["borough"].astype("string")
