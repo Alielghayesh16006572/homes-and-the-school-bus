@@ -7,3 +7,4 @@ gunicorn==26.2.0
 
 # Notebook only (also fine to install locally / in Colab)
 matplotlib==3.11.2
+nbformat>=5.0      # needed by Plotly to draw charts inside the notebook
