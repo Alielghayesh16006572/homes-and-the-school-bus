@@ -167,7 +167,8 @@ def parse_delay_minutes(text) -> float:
     """Convert the free-text How_Long_Delayed field to minutes.
 
     Handles: '25 minutes', '30MINS', '20', '1hr', '1 hr 15 min', '1:30',
-    '45-60 min' (midpoint), '1/2 hour', '1.5 hrs'. Returns NaN when nothing parses.
+    '45-60 min' (midpoint), '45 min - 1 hr' (midpoint, mixed units), '1/2 hour',
+    '1 1/2 hours', '1.5 hrs'. Returns NaN when nothing parses.
     """
     if text is None or (isinstance(text, float) and np.isnan(text)):
         return np.nan
@@ -175,20 +176,35 @@ def parse_delay_minutes(text) -> float:
         return _DELAY_CACHE[text]
 
     s = str(text).lower().strip()
+    s = re.sub(r"(\d+)\s+1/2", r"\1.5", s)           # '1 1/2 hours' -> '1.5 hours'
     s = s.replace("1/2", "0.5").replace("half", "0.5")
     result = np.nan
 
     hhmm = re.fullmatch(r"(\d{1,2}):(\d{2})", s)
-    rng = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)", s)
+    rng = re.search(r"(\d+(?:\.\d+)?)\s*([a-z]*)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*([a-z]*)", s)
     hours = re.search(r"(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b", s)
     mins = re.search(r"(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes)\b", s)
     bare = re.fullmatch(r"(\d+(?:\.\d+)?)", s)
 
+    if rng:
+        # Each end keeps its own unit ('45 min - 1 hr' -> 52.5); a bare end takes
+        # the other end's unit, and two bare ends take the text's unit.
+        u1, u2 = (u[0] if u[:1] in ("h", "m") else "" for u in (rng.group(2), rng.group(4)))
+        default = "h" if ("h" in s and "m" not in s) else "m"
+        bare_start = not u1
+        u2 = u2 or u1 or default
+        u1 = u1 or u2
+        lo, hi = (float(v) * (60 if u == "h" else 1) for v, u in ((rng.group(1), u1), (rng.group(3), u2)))
+        if hi < lo and bare_start and u1 == "h":        # '40-1hr' = 40 min to 1 hr
+            lo = float(rng.group(1))
+        elif hi < lo and (u1, u2) == ("h", "m"):        # '1hr-20min' = 1 hr 20 min, handled below
+            rng = None
+        # Any other downward range ('25-20 min') is two numbers in the wrong order: midpoint.
+
     if hhmm:                                            # '1:30' -> 90
         result = int(hhmm.group(1)) * 60 + int(hhmm.group(2))
     elif rng:                                           # '45-60 min' -> 52.5
-        mid = (float(rng.group(1)) + float(rng.group(2))) / 2
-        result = mid * 60 if ("h" in s and "m" not in s) else mid
+        result = (lo + hi) / 2
     elif hours or mins:                                 # '1 hr 15 min' -> 75
         result = (float(hours.group(1)) * 60 if hours else 0) + \
                  (float(mins.group(1)) if mins else 0)
@@ -339,7 +355,8 @@ def clean_bus(raw: pd.DataFrame, log: CleaningLog | None = None) -> pd.DataFrame
     # Duplicates: the same incident edited several times -> keep the latest edit.
     df = df.drop_duplicates()
     log.add("bus", "drop exact duplicates", n, len(df)); n = len(df)
-    df = (df.sort_values("last_updated_on")
+    # A version with no update date sorts first, so it never beats a dated edit.
+    df = (df.sort_values("last_updated_on", na_position="first")
             .drop_duplicates("busbreakdown_id", keep="last"))
     log.add("bus", "keep latest version of each busbreakdown_id", n, len(df)); n = len(df)
 
@@ -435,35 +452,47 @@ def aggregate_bus(bus: pd.DataFrame, period: str = "month") -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 5. Integration
 # ---------------------------------------------------------------------------
-def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month",
-              data_end: pd.Timestamp | None = None) -> pd.DataFrame:
-    """Join housing and bus aggregates on (borough, period) over their common time span.
+def common_span(housing: pd.DataFrame, bus: pd.DataFrame) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """First and last month covered by BOTH datasets.
 
-    A full borough x period grid is built first so that a borough with zero
-    completions in a month still appears (as 0) instead of silently vanishing,
-    which an inner join would do.
+    Compute it on the FULL data and pass it to `integrate`: a filtered subset can
+    stop early (a rare delay reason, the March 2020 closure) without the data
+    ending, and its own span would wrongly cut months or school years.
     """
+    return (max(housing["completion_month"].min(), bus["month"].min()),
+            min(housing["completion_month"].max(), bus["month"].max()))
+
+
+def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str,
+              span: tuple[pd.Timestamp, pd.Timestamp],
+              school_years: list[str] | None = None) -> pd.DataFrame:
+    """Join housing and bus aggregates on (borough, period) over `span`.
+
+    `span` = `common_span(full housing, full bus)`. `school_years` limits the result
+    to the selected school years (None = all). A full borough x period grid is built
+    first so that a borough with zero completions in a month still appears (as 0)
+    instead of silently vanishing, which an inner join would do.
+    """
+    start, end = span
     h = aggregate_housing(housing, period)
     b = aggregate_bus(bus, period)
 
     if period == "month":
-        start = max(h["month"].min(), b["month"].min())
-        end = min(h["month"].max(), b["month"].max())
-        periods = pd.date_range(start, end, freq="MS")
+        periods = pd.Series(pd.date_range(start, end, freq="MS"))
+        if school_years is not None:
+            periods = periods[school_year_of(periods).isin(school_years)]
         grid = pd.MultiIndex.from_product([BOROUGHS, periods], names=["borough", "month"]).to_frame(index=False)
         grid["school_year"] = school_year_of(grid["month"])
     else:
-        # Only COMPLETE school years: the newest one in the data has only a few months
-        # so far, and a partial year is low on both housing and bus counts, which would
-        # inflate every correlation. A school year is complete once the bus data
-        # reaches its final month (June). `data_end` = the last month of the FULL bus
-        # data: the website passes it, because a filtered subset can end early (e.g.
-        # 2019-20 has no incidents after the March 2020 closure) without the school
-        # year being unfinished.
-        last_month = data_end if data_end is not None else bus["month"].max()
-        complete = {sy for sy in set(b["school_year"])
-                    if pd.Timestamp(f"{sy.split('-')[1]}-06-01") <= last_month}
-        common = sorted(set(h["school_year"]) & complete)
+        # Only COMPLETE school years (July -> June, both ends inside the span of
+        # both datasets): the newest one has only a few months so far, and a
+        # partial year is low on both housing and bus counts, which would inflate
+        # every correlation.
+        first = start.year if start.month <= 7 else start.year + 1
+        last = end.year if end.month >= 6 else end.year - 1
+        common = [f"{y}-{y + 1}" for y in range(first, last)]
+        if school_years is not None:
+            common = [sy for sy in common if sy in set(school_years)]
         grid = pd.MultiIndex.from_product([BOROUGHS, common], names=["borough", "school_year"]).to_frame(index=False)
 
     grid["borough"] = grid["borough"].astype("string")
@@ -482,7 +511,8 @@ BUS_COUNT_COLS = ["incidents", "breakdowns", "running_late", "heavy_traffic_inci
 
 
 def post_integration_clean(merged: pd.DataFrame, period: str = "month",
-                           log: CleaningLog | None = None) -> pd.DataFrame:
+                           log: CleaningLog | None = None,
+                           session_months: set | None = None) -> pd.DataFrame:
     log = log or CleaningLog()
     df = merged.copy()
     n = len(df)
@@ -511,10 +541,13 @@ def post_integration_clean(merged: pd.DataFrame, period: str = "month",
     # Bus side: a month with (almost) no incidents in the whole city is a month
     # without school bus service (summer, COVID closure from March 2020), NOT a
     # perfect month. Mark it and leave its bus metrics NaN so it is excluded.
+    # `session_months` = the in-session months judged on the FULL data (see
+    # `session_months_of`): in a filtered subset, a month with no matching
+    # incidents is a real 0, not a month without service.
     if period == "month":
-        city = df.groupby("month")["incidents"].transform("sum")
-        threshold = 0.05 * df.groupby("month")["incidents"].sum().median()
-        df["school_in_session"] = city.fillna(0) > threshold
+        if session_months is None:
+            session_months = session_months_of(df)
+        df["school_in_session"] = df["month"].isin(session_months)
         off = ~df["school_in_session"]
         df.loc[off, BUS_COUNT_COLS + ["median_delay_min", "avg_students", "heavy_traffic_share"]] = np.nan
         df.loc[df["school_in_session"], BUS_COUNT_COLS] = df.loc[df["school_in_session"], BUS_COUNT_COLS].fillna(0)
@@ -532,21 +565,36 @@ def post_integration_clean(merged: pd.DataFrame, period: str = "month",
         df["month"] = pd.to_datetime(df["month"])
         df["year"] = df["month"].dt.year.astype("Int64")
         # Cumulative pipeline: a building keeps housing people after the month it opens.
+        # asfreq fills in months between non-adjacent selected school years as NaN,
+        # so the window is always 12 calendar months, not 12 rows.
         df = df.sort_values(["borough", "month"])
-        df["units_last_12m"] = (df.groupby("borough")["units_completed"]
-                                  .transform(lambda s: s.rolling(12, min_periods=1).sum())
-                                  .astype("Int64"))
+        rolled = []
+        for _, g in df.groupby("borough"):
+            s = g.set_index("month")["units_completed"].astype(float).asfreq("MS")
+            rolled.append(pd.Series(s.rolling(12, min_periods=1).sum().reindex(g["month"]).to_numpy(),
+                                    index=g.index))
+        df["units_last_12m"] = pd.concat(rolled).round().astype("Int64")
 
     df = df.drop_duplicates(subset=["borough", period])
     log.add("integrated", "drop duplicate (borough, period) keys", n, len(df))
     return df.reset_index(drop=True)
 
 
-def build_integrated(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month",
-                     log: CleaningLog | None = None,
-                     data_end: pd.Timestamp | None = None) -> pd.DataFrame:
+def session_months_of(merged_monthly: pd.DataFrame) -> set:
+    """Months with school bus service: citywide incidents above 5% of the median month.
+    Judge it on the integration of the FULL data and pass the result on."""
+    city = merged_monthly.groupby("month")["incidents"].sum()
+    return set(city.index[city > 0.05 * city.median()])
+
+
+def build_integrated(housing: pd.DataFrame, bus: pd.DataFrame, period: str,
+                     span: tuple[pd.Timestamp, pd.Timestamp],
+                     school_years: list[str] | None = None,
+                     session_months: set | None = None,
+                     log: CleaningLog | None = None) -> pd.DataFrame:
     """integrate + post_integration_clean in one call (used by the website)."""
-    return post_integration_clean(integrate(housing, bus, period, data_end), period, log)
+    return post_integration_clean(integrate(housing, bus, period, span, school_years), period, log,
+                                  session_months)
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +606,9 @@ def lagged_correlations(monthly: pd.DataFrame, x: str = "units_completed",
     per borough, using only months with school bus service."""
     rows = []
     for borough, g in monthly.sort_values("month").groupby("borough"):
+        # Shift by calendar months: asfreq fills any gap between non-adjacent
+        # selected school years with NaN instead of pairing months across it.
+        g = g.set_index("month").asfreq("MS")
         xs = g[x].astype(float)
         ys = g[y].astype(float)
         for lag in range(max_lag + 1):

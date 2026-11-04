@@ -22,7 +22,8 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import figures as F  # noqa: E402
-from pipeline import BOROUGHS, add_flags, build_integrated, lagged_correlations, ols_line  # noqa: E402
+from pipeline import (BOROUGHS, add_flags, build_integrated, common_span,  # noqa: E402
+                      integrate, lagged_correlations, ols_line, session_months_of)
 
 DATA = ROOT / "data" / "processed"
 
@@ -55,7 +56,8 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 HOUSING, BUS = load_data()
-DATA_END = BUS["month"].max()   # last month of the full bus data, used to judge complete school years
+SPAN = common_span(HOUSING, BUS)   # months covered by both FULL datasets; filtered rows can stop early
+SESSION_MONTHS = session_months_of(integrate(HOUSING, BUS, "month", SPAN))   # judged on the full data too
 
 SCHOOL_YEARS = sorted(set(HOUSING["school_year"].dropna()) & set(BUS["school_year"].dropna()))
 CONSTRUCTION_TYPES = sorted(HOUSING["reporting_construction_type"].dropna().unique())
@@ -71,11 +73,20 @@ BOROUGH_WORDS = {
     "queens": "QUEENS", "staten island": "STATEN ISLAND", "staten": "STATEN ISLAND",
 }
 CONSTRUCTION_WORDS = {
-    "new construction": "New Construction", "new building": "New Construction",
-    "new buildings": "New Construction", "new": "New Construction",
-    "preservation": "Preservation", "preserved": "Preservation", "renovat": "Preservation",
+    "new construction": "New Construction", "new building": "New Construction", "new": "New Construction",
+    "preservation": "Preservation", "preserved": "Preservation",
+    "renovated": "Preservation", "renovation": "Preservation", "renovate": "Preservation",
 }
 INCIDENT_WORDS = {"breakdown": "Breakdown", "running late": "Running Late", "late": "Running Late"}
+
+
+def _take(word: str, q: str) -> tuple[bool, str]:
+    """Find `word` (or its plural) as whole words in q, so 'new' does not match
+    'newark'; returns whether it was found and q with it removed."""
+    pattern = rf"\b{re.escape(word)}(?:s|es)?\b"
+    if re.search(pattern, q):
+        return True, re.sub(pattern, " ", q)
+    return False, q
 
 
 def parse_search(query: str) -> dict:
@@ -89,26 +100,31 @@ def parse_search(query: str) -> dict:
     found = {"borough": [], "school_year": [], "construction": [], "incident": [], "reason": []}
 
     for word, value in sorted(BOROUGH_WORDS.items(), key=lambda kv: -len(kv[0])):
-        if word in q and value not in found["borough"]:
+        hit, q = _take(word, q)
+        if hit and value not in found["borough"]:
             found["borough"].append(value)
-            q = q.replace(word, " ")
     for year in re.findall(r"\b(20\d{2})\b", q):
         found["school_year"] += [sy for sy in SCHOOL_YEARS if year in sy.split("-") and sy not in found["school_year"]]
         q = q.replace(year, " ")
     for word, value in sorted(INCIDENT_WORDS.items(), key=lambda kv: -len(kv[0])):
-        if word in q and value in INCIDENT_TYPES and value not in found["incident"]:
+        if value not in INCIDENT_TYPES:
+            continue
+        hit, q = _take(word, q)
+        if hit and value not in found["incident"]:
             found["incident"].append(value)
-            q = q.replace(word, " ")
     for reason in REASONS:
         key = re.sub(r"[^a-z ]", "", reason.lower())
         main_word = max(key.split(), key=len) if key.split() else ""
-        if main_word and len(main_word) > 3 and main_word in q:
-            found["reason"].append(reason)
-            q = q.replace(main_word, " ")
+        if main_word and len(main_word) > 3:
+            hit, q = _take(main_word, q)
+            if hit:
+                found["reason"].append(reason)
     for word, value in sorted(CONSTRUCTION_WORDS.items(), key=lambda kv: -len(kv[0])):
-        if re.search(rf"\b{word}", q) and value in CONSTRUCTION_TYPES and value not in found["construction"]:
+        if value not in CONSTRUCTION_TYPES:
+            continue
+        hit, q = _take(word, q)
+        if hit and value not in found["construction"]:
             found["construction"].append(value)
-            q = re.sub(rf"\b{word}\w*", " ", q)
 
     found["unmatched"] = [w for w in q.split() if w not in {"and", "in", "the", "of", "for", "units", "housing", "bus", "buses"}]
     return found
@@ -132,21 +148,26 @@ def filter_rows(boroughs, school_years, construction, incidents, reasons):
     return h, b
 
 
-def build_report(h: pd.DataFrame, b: pd.DataFrame):
+def build_report(h: pd.DataFrame, b: pd.DataFrame, school_years: list[str] | None = None,
+                 boroughs: list[str] | None = None):
     if h.empty or b.empty:
         empty = F.empty_figure()
         return [empty] * 8, "No rows match these filters — widen the selection.", []
 
-    yearly = build_integrated(h, b, "school_year", data_end=DATA_END)
-    monthly = build_integrated(h, b, "month")
+    yearly = build_integrated(h, b, "school_year", SPAN, school_years)
+    monthly = build_integrated(h, b, "month", SPAN, school_years, SESSION_MONTHS)
     if yearly.empty or monthly.empty:
         empty = F.empty_figure("No complete school year in this selection")
-        return [empty] * 8, ("No complete school year in this selection — the current school year is "
-                             "still in progress, so it is left out of the comparisons."), []
+        return [empty] * 8, (f"No complete school year in this selection — only school years from "
+                             f"{SPAN[0]:%B %Y} to {SPAN[1]:%B %Y}, where both datasets have data, are compared, "
+                             f"and the current school year is still in progress."), []
 
-    if b["borough"].nunique() < len(BOROUGHS):     # keep only boroughs actually selected
-        yearly = yearly[yearly["borough"].isin(b["borough"].unique())]
-        monthly = monthly[monthly["borough"].isin(b["borough"].unique())]
+    if boroughs:     # keep only the selected boroughs (the grid always has all five)
+        yearly = yearly[yearly["borough"].isin(boroughs)]
+        monthly = monthly[monthly["borough"].isin(boroughs)]
+    # Summary, map and Pre-K chart cover the same complete school years as the comparisons.
+    h = h[h["school_year"].isin(yearly["school_year"])]
+    b = b[b["school_year"].isin(yearly["school_year"])]
 
     figs = [
         F.rq1_units_vs_incidents(yearly), F.rq2_timeline(monthly),
@@ -311,7 +332,7 @@ def generate_report(_n, boroughs, years, construction, incidents, reasons):
     """Generate Report: every chart and the live story numbers update together.
     Runs once on page load with no filters so the page is never empty."""
     h, b = filter_rows(boroughs, years, construction, incidents, reasons)
-    figs, summary, live = build_report(h, b)
+    figs, summary, live = build_report(h, b, years or None, boroughs or None)
     return figs + [summary, live]
 
 

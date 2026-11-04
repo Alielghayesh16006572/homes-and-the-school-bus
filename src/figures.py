@@ -236,6 +236,11 @@ def rq6_heavy_traffic_share(yearly: pd.DataFrame) -> go.Figure:
     med = df.groupby("borough")["new_construction_units"].transform("median")
     df["group"] = np.where(df["new_construction_units"] > med,
                            "High new-construction years", "Low new-construction years")
+    # A borough whose years all land in one group (e.g. no new construction under a
+    # "Preservation" filter) has nothing to compare, so it is left out.
+    df = df[df.groupby("borough")["group"].transform("nunique") == 2]
+    if df.empty:
+        return empty_figure("No borough has both high and low new-construction years in this selection")
     agg = (df.groupby(["borough", "group"])
              .agg(ht=("heavy_traffic_incidents", "sum"), inc=("incidents", "sum"), years=("school_year", "count"))
              .reset_index())
@@ -283,6 +288,8 @@ def rq8_prek_delay_box(bus: pd.DataFrame, yearly: pd.DataFrame) -> go.Figure:
     med = yearly.groupby("borough")["units_completed"].transform("median")
     growth = yearly.assign(growth=np.where(yearly["units_completed"] > med, "High-completion years",
                                            "Low-completion years"))[["borough", "school_year", "growth"]]
+    # Boroughs whose years all land in one group have nothing to compare.
+    growth = growth[growth.groupby("borough")["growth"].transform("nunique") == 2]
     df = bus.dropna(subset=["delay_minutes"]).merge(growth, on=["borough", "school_year"], how="inner")
     if df.empty:
         return empty_figure()
