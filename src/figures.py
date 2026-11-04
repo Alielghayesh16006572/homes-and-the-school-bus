@@ -60,11 +60,21 @@ def _style(fig: go.Figure, height: int = 420) -> go.Figure:
     return fig
 
 
-def empty_figure(message: str = "No data for the selected filters") -> go.Figure:
+def empty_figure(message: str = "No data for these filters — try widening the selection") -> go.Figure:
     fig = go.Figure()
     fig.add_annotation(text=message, showarrow=False, font=dict(size=14, color=MUTED))
     fig.update_xaxes(visible=False); fig.update_yaxes(visible=False)
     return _style(fig, 300)
+
+
+def split_years(yearly: pd.DataFrame, col: str, high: str, low: str) -> pd.DataFrame:
+    """Label each borough's years high/low at that borough's own median of `col`, so
+    big and small boroughs are compared fairly. Boroughs whose years all land in
+    one group (e.g. no new construction under a "Preservation" filter) have nothing
+    to compare and are left out."""
+    med = yearly.groupby("borough")[col].transform("median")
+    df = yearly.assign(group=np.where(yearly[col] > med, high, low))
+    return df[df.groupby("borough")["group"].transform("nunique") == 2]
 
 
 def _r_text(r: float) -> str:
@@ -232,13 +242,7 @@ def rq6_heavy_traffic_share(yearly: pd.DataFrame) -> go.Figure:
     df = yearly.dropna(subset=["heavy_traffic_share"]).copy()
     if df.empty:
         return empty_figure()
-    # Split each borough's years at its own median so big and small boroughs are compared fairly.
-    med = df.groupby("borough")["new_construction_units"].transform("median")
-    df["group"] = np.where(df["new_construction_units"] > med,
-                           "High new-construction years", "Low new-construction years")
-    # A borough whose years all land in one group (e.g. no new construction under a
-    # "Preservation" filter) has nothing to compare, so it is left out.
-    df = df[df.groupby("borough")["group"].transform("nunique") == 2]
+    df = split_years(df, "new_construction_units", "High new-construction years", "Low new-construction years")
     if df.empty:
         return empty_figure("No borough has both high and low new-construction years in this selection")
     agg = (df.groupby(["borough", "group"])
@@ -285,11 +289,8 @@ def rq8_prek_delay_box(bus: pd.DataFrame, yearly: pd.DataFrame) -> go.Figure:
     the browser never has to receive hundreds of thousands of points."""
     if bus.empty or yearly.empty:
         return empty_figure()
-    med = yearly.groupby("borough")["units_completed"].transform("median")
-    growth = yearly.assign(growth=np.where(yearly["units_completed"] > med, "High-completion years",
-                                           "Low-completion years"))[["borough", "school_year", "growth"]]
-    # Boroughs whose years all land in one group have nothing to compare.
-    growth = growth[growth.groupby("borough")["growth"].transform("nunique") == 2]
+    growth = (split_years(yearly, "units_completed", "High-completion years", "Low-completion years")
+              .rename(columns={"group": "growth"})[["borough", "school_year", "growth"]])
     df = bus.dropna(subset=["delay_minutes"]).merge(growth, on=["borough", "school_year"], how="inner")
     if df.empty:
         return empty_figure()

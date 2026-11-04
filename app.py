@@ -22,6 +22,7 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import figures as F  # noqa: E402
+from insights import takeaways  # noqa: E402
 from pipeline import (BOROUGHS, add_flags, build_integrated, common_span,  # noqa: E402
                       integrate, lagged_correlations, ols_line, session_months_of)
 
@@ -152,7 +153,7 @@ def build_report(h: pd.DataFrame, b: pd.DataFrame, school_years: list[str] | Non
                  boroughs: list[str] | None = None):
     if h.empty or b.empty:
         empty = F.empty_figure()
-        return [empty] * 8, "No rows match these filters — widen the selection.", []
+        return [empty] * 8, "No rows match these filters — widen the selection.", [], [""] * 8
 
     yearly = build_integrated(h, b, "school_year", SPAN, school_years)
     monthly = build_integrated(h, b, "month", SPAN, school_years, SESSION_MONTHS)
@@ -160,7 +161,7 @@ def build_report(h: pd.DataFrame, b: pd.DataFrame, school_years: list[str] | Non
         empty = F.empty_figure("No complete school year in this selection")
         return [empty] * 8, (f"No complete school year in this selection — only school years from "
                              f"{SPAN[0]:%B %Y} to {SPAN[1]:%B %Y}, where both datasets have data, are compared, "
-                             f"and the current school year is still in progress."), []
+                             f"and the current school year is still in progress."), [], [""] * 8
 
     if boroughs:     # keep only the selected boroughs (the grid always has all five)
         yearly = yearly[yearly["borough"].isin(boroughs)]
@@ -191,7 +192,29 @@ def build_report(h: pd.DataFrame, b: pd.DataFrame, school_years: list[str] | Non
                 + ("n/a" if best.empty else f"{int(best.abs().idxmax())} months (mean r = {best.loc[best.abs().idxmax()]:+.2f})") + "."),
         html.Li(f"Share of incidents caused by heavy traffic: {100 * b['is_heavy_traffic'].mean():.1f}%."),
     ]
-    return figs, summary, live
+    return figs, summary, live, takeaways(h, b, yearly, monthly)
+
+
+def move_title(fig) -> str:
+    """Take the chart's subtitle out of the figure so the page can show it as text.
+    Plotly titles cannot wrap, so long ones were cut off on phones; the card
+    heading and subtitle are HTML instead and wrap normally."""
+    m = re.search(r"<span[^>]*>(.*?)</span>", fig.layout.title.text or "")
+    fig.update_layout(title=None, margin_t=40)
+    return m.group(1) if m else ""
+
+
+def describe_filters(boroughs, years, construction, incidents, reasons) -> str:
+    """'Showing: Bronx, Queens · all school years · ...' for the report that is on screen."""
+    def part(values, name, label=str):
+        if not values:
+            return f"all {name}"
+        return ", ".join(label(v) for v in values) if len(values) <= 3 else f"{len(values)} {name}"
+    return "Showing: " + " · ".join([
+        part(boroughs, "boroughs", str.title), part(years, "school years"),
+        part(construction, "construction types"), part(incidents, "incident types"),
+        part(reasons, "delay reasons"),
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +228,14 @@ def dropdown(id_, label, options, placeholder="All"):
 
 
 RQ_CARDS = [
-    ("rq1", "Ali Elghayesh"), ("rq2", "Asser Khattab"), ("rq3", "Ali Ahmed"), ("rq4", "Ahmed Rashad"),
-    ("rq5", "Asser Khattab"), ("rq6", "Ali Elghayesh"), ("rq7", "Ali Ahmed"), ("rq8", "Ahmed Rashad"),
+    ("rq1", "Ali Elghayesh", "RQ1 · Affordable units completed vs. school-bus incidents"),
+    ("rq2", "Asser Khattab", "RQ2 · Housing pipeline and bus disruptions over time"),
+    ("rq3", "Ali Ahmed", "RQ3 · Deeply affordable share vs. median delay"),
+    ("rq4", "Ahmed Rashad", "RQ4 · Do completions lead bus incidents?"),
+    ("rq5", "Asser Khattab", "RQ5 · Where new affordable housing and bus disruptions concentrate"),
+    ("rq6", "Ali Elghayesh", "RQ6 · Heavy-traffic share: high vs. low construction years"),
+    ("rq7", "Ali Ahmed", "RQ7 · Family-sized units vs. students on board"),
+    ("rq8", "Ahmed Rashad", "RQ8 · Delay length for Pre-K vs. school-age riders"),
 ]
 
 app = Dash(__name__, title="Homes and the School Bus",
@@ -243,11 +272,18 @@ app.layout = html.Div(className="page", children=[
         ]),
     ]),
 
+    html.P(id="active-filters", className="active-filters"),
+
     html.Section(className="grid", children=[
         html.Div(className="card" + (" wide" if rq in ("rq2", "rq5") else ""), children=[
-            html.Span(member, className="badge"),
+            html.Div(className="card-head", children=[
+                html.H3(title, className="card-title"),
+                html.Span(member, className="badge"),
+            ]),
+            html.P(id=f"sub-{rq}", className="card-sub"),
             dcc.Loading(dcc.Graph(id=f"fig-{rq}", config={"displaylogo": False}), type="circle"),
-        ]) for rq, member in RQ_CARDS
+            html.P(id=f"take-{rq}", className="takeaway"),
+        ]) for rq, member, title in RQ_CARDS
     ]),
 
     html.Section(className="story", children=[
@@ -322,8 +358,10 @@ def apply_search(_clicks, _submit, query):
 
 
 @app.callback(
-    [Output(f"fig-{rq}", "figure") for rq, _ in RQ_CARDS]
-    + [Output("summary", "children"), Output("live-findings", "children")],
+    [Output(f"fig-{rq}", "figure") for rq, _, _ in RQ_CARDS]
+    + [Output(f"sub-{rq}", "children") for rq, _, _ in RQ_CARDS]
+    + [Output(f"take-{rq}", "children") for rq, _, _ in RQ_CARDS]
+    + [Output("summary", "children"), Output("live-findings", "children"), Output("active-filters", "children")],
     Input("generate", "n_clicks"),
     State("f-borough", "value"), State("f-year", "value"), State("f-construction", "value"),
     State("f-incident", "value"), State("f-reason", "value"),
@@ -332,8 +370,9 @@ def generate_report(_n, boroughs, years, construction, incidents, reasons):
     """Generate Report: every chart and the live story numbers update together.
     Runs once on page load with no filters so the page is never empty."""
     h, b = filter_rows(boroughs, years, construction, incidents, reasons)
-    figs, summary, live = build_report(h, b, years or None, boroughs or None)
-    return figs + [summary, live]
+    figs, summary, live, takes = build_report(h, b, years or None, boroughs or None)
+    subs = [move_title(fig) for fig in figs]
+    return figs + subs + takes + [summary, live, describe_filters(boroughs, years, construction, incidents, reasons)]
 
 
 if __name__ == "__main__":

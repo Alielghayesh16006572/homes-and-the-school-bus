@@ -25,7 +25,8 @@ The notebook justifies this choice and the alternatives considered.
 ├── app.py                    Dash website (filters, search mode, Generate Report, 8 charts, story)
 ├── src/
 │   ├── pipeline.py           loading, cleaning, aggregation, integration, post-integration cleaning
-│   └── figures.py            one Plotly figure function per research question (used by notebook AND website)
+│   ├── figures.py            one Plotly figure function per research question (used by notebook AND website)
+│   └── insights.py           one-sentence takeaway per research question, recomputed for the current filters
 ├── assets/style.css          website styling (loaded automatically by Dash)
 ├── data/
 │   ├── raw/                  raw downloads (git-ignored, re-created by the notebook)
@@ -81,7 +82,8 @@ The free tier sleeps after inactivity; the first request after that takes about 
   dropdowns (boroughs, 4-digit years → the school years containing that year, `new` / `preservation`,
   `breakdown` / `late`, delay-reason words); unrecognised words are reported.
 - **Generate Report:** recomputes the integration on the filtered rows and redraws all eight charts and the
-  live numbers in the story section.
+  live numbers in the story section. A line above the charts shows which filters the report uses, and each
+  chart has a one-sentence takeaway computed from the same rows.
 
 ## Research questions and contributions
 
