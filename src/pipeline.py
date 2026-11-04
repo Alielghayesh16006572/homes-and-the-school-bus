@@ -435,7 +435,8 @@ def aggregate_bus(bus: pd.DataFrame, period: str = "month") -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 5. Integration
 # ---------------------------------------------------------------------------
-def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month") -> pd.DataFrame:
+def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month",
+              data_end: pd.Timestamp | None = None) -> pd.DataFrame:
     """Join housing and bus aggregates on (borough, period) over their common time span.
 
     A full borough x period grid is built first so that a borough with zero
@@ -455,8 +456,11 @@ def integrate(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month") -
         # Only COMPLETE school years: the newest one in the data has only a few months
         # so far, and a partial year is low on both housing and bus counts, which would
         # inflate every correlation. A school year is complete once the bus data
-        # reaches its final month (June).
-        last_month = bus["month"].max()
+        # reaches its final month (June). `data_end` = the last month of the FULL bus
+        # data: the website passes it, because a filtered subset can end early (e.g.
+        # 2019-20 has no incidents after the March 2020 closure) without the school
+        # year being unfinished.
+        last_month = data_end if data_end is not None else bus["month"].max()
         complete = {sy for sy in set(b["school_year"])
                     if pd.Timestamp(f"{sy.split('-')[1]}-06-01") <= last_month}
         common = sorted(set(h["school_year"]) & complete)
@@ -539,9 +543,10 @@ def post_integration_clean(merged: pd.DataFrame, period: str = "month",
 
 
 def build_integrated(housing: pd.DataFrame, bus: pd.DataFrame, period: str = "month",
-                     log: CleaningLog | None = None) -> pd.DataFrame:
+                     log: CleaningLog | None = None,
+                     data_end: pd.Timestamp | None = None) -> pd.DataFrame:
     """integrate + post_integration_clean in one call (used by the website)."""
-    return post_integration_clean(integrate(housing, bus, period), period, log)
+    return post_integration_clean(integrate(housing, bus, period, data_end), period, log)
 
 
 # ---------------------------------------------------------------------------

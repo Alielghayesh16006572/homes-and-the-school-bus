@@ -55,6 +55,7 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 HOUSING, BUS = load_data()
+DATA_END = BUS["month"].max()   # last month of the full bus data, used to judge complete school years
 
 SCHOOL_YEARS = sorted(set(HOUSING["school_year"].dropna()) & set(BUS["school_year"].dropna()))
 CONSTRUCTION_TYPES = sorted(HOUSING["reporting_construction_type"].dropna().unique())
@@ -136,7 +137,7 @@ def build_report(h: pd.DataFrame, b: pd.DataFrame):
         empty = F.empty_figure()
         return [empty] * 8, "No rows match these filters — widen the selection.", []
 
-    yearly = build_integrated(h, b, "school_year")
+    yearly = build_integrated(h, b, "school_year", data_end=DATA_END)
     monthly = build_integrated(h, b, "month")
     if yearly.empty or monthly.empty:
         empty = F.empty_figure("No complete school year in this selection")
